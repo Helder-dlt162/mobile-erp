@@ -149,6 +149,7 @@ class PurchaseInvoice(Base):
     barcode: Mapped[str] = mapped_column(String(80), default="")
     category: Mapped[str] = mapped_column(String(80), default="Insumos")
     notes: Mapped[str] = mapped_column(String(255), default="")
+    cancellation_reason: Mapped[str] = mapped_column(String(255), default="")
     status: Mapped[str] = mapped_column(String(20), default="Pendente")
     total: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

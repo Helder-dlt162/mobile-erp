@@ -6,7 +6,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.dependencies import CurrentUser, DbSession
 from app.models import InventoryItem, InvoiceItem, PayableAccount, PurchaseInvoice, Supplier
-from app.schemas import PurchaseInvoiceCreate, PurchaseInvoiceRead
+from app.schemas import InvoiceCancellation, PurchaseInvoiceCreate, PurchaseInvoiceRead
 
 router = APIRouter(prefix="/invoices", tags=["Notas fiscais"])
 
@@ -73,6 +73,33 @@ def receive_invoice(invoice_id: int, _: CurrentUser, db: DbSession) -> PurchaseI
             notes=invoice.notes,
         )
         db.add(payable)
+    db.commit()
+    db.refresh(invoice)
+    return invoice
+
+
+@router.post("/{invoice_id}/cancel", response_model=PurchaseInvoiceRead)
+def cancel_invoice(invoice_id: int, payload: InvoiceCancellation, _: CurrentUser, db: DbSession) -> PurchaseInvoice:
+    invoice = db.scalar(select(PurchaseInvoice).options(selectinload(PurchaseInvoice.items)).where(PurchaseInvoice.id == invoice_id))
+    if not invoice:
+        raise HTTPException(status_code=404, detail="NF não encontrada")
+    if invoice.status == "Cancelada":
+        raise HTTPException(status_code=409, detail="NF já está cancelada")
+    if invoice.status == "Recebida":
+        for invoice_item in invoice.items:
+            inventory_item = db.get(InventoryItem, invoice_item.inventory_item_id)
+            if not inventory_item or inventory_item.stock < invoice_item.quantity:
+                raise HTTPException(status_code=409, detail=f"Não é possível estornar o SKU {invoice_item.sku}: saldo já utilizado")
+            inventory_item.stock -= invoice_item.quantity
+            inventory_item.state = "Abaixo do mínimo" if inventory_item.stock <= inventory_item.minimum_stock else "Normal"
+            inventory_item.color = "red" if inventory_item.stock <= inventory_item.minimum_stock else "green"
+        payable = db.scalar(select(PayableAccount).where(PayableAccount.invoice_id == invoice.id))
+        if payable:
+            if payable.status == "Paga":
+                raise HTTPException(status_code=409, detail="Não é possível cancelar uma NF com conta já paga")
+            payable.status = "Cancelada"
+    invoice.status = "Cancelada"
+    invoice.cancellation_reason = payload.reason
     db.commit()
     db.refresh(invoice)
     return invoice

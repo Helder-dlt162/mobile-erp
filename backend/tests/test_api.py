@@ -140,6 +140,22 @@ def test_admin_can_create_user_with_module_permissions() -> None:
     assert any(user["email"] == "pcp@atelier.com" for user in listed.json())
 
 
+def test_received_invoice_can_be_cancelled_and_reverses_stock() -> None:
+    login = client.post("/api/auth/login", json={"email": "admin@atelier.com", "password": "atelier123"})
+    token = login.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    before = client.get("/api/inventory", headers=headers).json()
+    item = next(item for item in before if item["sku"] == "MAT-001")
+    invoice = client.post("/api/invoices", headers=headers, json={"number": "NF-CANCEL-001", "supplier": "Fornecedor", "issue_date": "09/09/2026", "due_date": "10/10/2026", "items": [{"sku": "MAT-001", "description": "Madeira", "quantity": "1", "unit_cost": "10"}]})
+    received = client.post(f"/api/invoices/{invoice.json()['id']}/receive", headers=headers)
+    assert received.status_code == 200
+    cancelled = client.post(f"/api/invoices/{invoice.json()['id']}/cancel", headers=headers, json={"reason": "Cancelamento de teste"})
+    assert cancelled.status_code == 200
+    assert cancelled.json()["status"] == "Cancelada"
+    after = client.get("/api/inventory", headers=headers).json()
+    assert float(next(entry for entry in after if entry["id"] == item["id"])["stock"]) == float(item["stock"])
+
+
 def test_stock_movement_updates_balance_and_rejects_overdraft() -> None:
     login = client.post("/api/auth/login", json={"email": "admin@atelier.com", "password": "atelier123"})
     token = login.json()["access_token"]

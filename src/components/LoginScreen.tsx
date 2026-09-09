@@ -1,0 +1,12 @@
+import { useState } from 'react'
+import { AlertTriangle, ChevronRight, Sparkles } from 'lucide-react'
+import { API_URL } from '../api'
+
+export function LoginScreen({ onLogin }: { onLogin: (token: string) => void }) {
+  const [email, setEmail] = useState('admin@atelier.com')
+  const [password, setPassword] = useState('atelier123')
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+  async function submit(event: React.FormEvent<HTMLFormElement>) { event.preventDefault(); setError(''); setLoading(true); try { const response = await fetch(`${API_URL}/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password }) }); if (!response.ok) throw new Error('E-mail ou senha inválidos'); const result = await response.json() as { access_token: string }; onLogin(result.access_token) } catch (requestError) { setError(requestError instanceof Error ? requestError.message : 'Não foi possível conectar à API') } finally { setLoading(false) } }
+  return <div className="login-shell"><div className="login-art"><div className="brand-lockup"><div className="brand-mark"><Sparkles size={18} strokeWidth={2.5} /></div><div><strong>ATELIER</strong><span>INDUSTRIAL OS</span></div></div><div className="login-art-copy"><span className="eyebrow">Controle que acompanha o ritmo</span><h1>Da madeira ao móvel pronto.</h1><p>Uma visão única para produção, estoque e margem da sua fábrica.</p></div><div className="login-art-footer"><span>PCP · CUSTOS · ESTOQUE</span><span>v0.1 MVP</span></div></div><div className="login-panel"><div className="login-panel-inner"><div className="mobile-brand"><div className="brand-mark"><Sparkles size={18} /></div><strong>ATELIER</strong></div><span className="eyebrow">Acesso ao workspace</span><h2>Bem-vindo de volta</h2><p>Entre para acompanhar a operação da Ateliê Móveis.</p><form onSubmit={submit}><label>E-mail<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" required /></label><label>Senha<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" required /></label>{error && <div className="login-error"><AlertTriangle size={15} />{error}</div>}<button className="primary-button login-button" disabled={loading}>{loading ? 'Conectando...' : 'Entrar no sistema'}<ChevronRight size={16} /></button></form><small className="login-hint">Demo MVP: admin@atelier.com · atelier123</small></div></div></div>
+}

@@ -7,7 +7,7 @@ export interface ProductionOrder { id: string; product: string; quantity: number
 export interface InventoryItem { id: number; name: string; sku: string; stock: number; unit: string; minimum_stock: number; state: string; color: string; last_entry: string }
 export interface DashboardData { production_month: number; occupancy: number; average_cost: number; contribution_margin: number; orders: Array<{ code: string; product: string; quantity: number; progress: number; station: string; due: string; status: OrderStatus }>; inventory: InventoryItem[] }
 export interface InvoiceItem { id: number; sku: string; description: string; quantity: number; unit_cost: number; total: number }
-export interface PurchaseInvoice { id: number; number: string; supplier: string; issue_date: string; due_date: string; payment_method: string; description: string; barcode: string; category: string; notes: string; status: string; total: number; items: InvoiceItem[] }
+export interface PurchaseInvoice { id: number; number: string; supplier: string; issue_date: string; due_date: string; payment_method: string; description: string; barcode: string; category: string; notes: string; cancellation_reason: string; status: string; total: number; items: InvoiceItem[] }
 export interface Partner { id: number; document: string; legal_name: string; trade_name: string; email: string; phone: string; address: string; city: string; state: string; zip_code: string }
 export interface StockMovement { id: number; inventory_item_id: number; movement_type: 'Entrada' | 'Saída'; quantity: number; reason: string; reference: string; movement_date: string; item_name: string; sku: string }
 export interface AppSetting { category: string; payload: Record<string, string | number | boolean> }

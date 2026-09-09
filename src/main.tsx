@@ -31,11 +31,13 @@ import {
   X,
 } from 'lucide-react'
 import './styles.css'
-import { apiFetch, API_URL } from './api'
+import { apiFetch } from './api'
 import { demoInventory, demoOrders, formatBRL, inventoryLevel, mapOrders, navItems } from './domain'
 import type { AppSetting, AppUser, DashboardData, InventoryItem, InvoiceItem, Partner, ProductionOrder, PurchaseInvoice, Section, StockMovement, OrderStatus } from './domain'
 import { Bottleneck, CapacityChart, MetricCard, OrderRow, PageHeading, StockRow, WipView } from './components/shared'
 import { OverviewScreen } from './screens/OverviewScreen'
+import { InvoiceEntryScreen } from './screens/InvoiceEntryScreen'
+import { LoginScreen } from './components/LoginScreen'
 
 function App() {
   const [token, setToken] = useState(() => localStorage.getItem('atelier_access_token'))
@@ -107,9 +109,10 @@ function App() {
           {canSee('movements') && <button className={`nav-item ${section === 'Movimentações' ? 'active' : ''}`} onClick={() => setSection('Movimentações')}><PackageCheck size={18} />{sidebarOpen && <span>Movimentações</span>}</button>}
           <button className="nav-item" onClick={() => setSection('Relatórios' as Section)}><BarChart3 size={18} />{sidebarOpen && <span>Relatórios</span>}{sidebarOpen && <small className="nav-wip">WIP</small>}</button>
         </nav>
+        {sidebarOpen && <div className="nav-label admin-label">Administração</div>}
         <div className="sidebar-bottom">
-          {canSee('settings') && <button className={`nav-item ${section === 'Configurações' ? 'active' : ''}`} onClick={() => setSection('Configurações')}><Settings2 size={18} />{sidebarOpen && <span>Configurações</span>}</button>}
           {currentUser?.role === 'admin' && <><button className={`nav-item ${(section === 'Usuários' || section === 'Funcionários') ? 'active' : ''}`} onClick={() => setUsersMenuOpen(!usersMenuOpen)}><Users size={18} />{sidebarOpen && <span>Usuários</span>}{sidebarOpen && (usersMenuOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />)}</button>{sidebarOpen && usersMenuOpen && <div className="nav-submenu"><button className={`nav-subitem ${section === 'Usuários' ? 'active' : ''}`} onClick={() => setSection('Usuários')}>Usuários</button><button className="nav-subitem wip" onClick={() => setSection('Funcionários')}>Funcionários <small>WIP</small></button></div>}</>}
+          {canSee('settings') && <button className={`nav-item ${section === 'Configurações' ? 'active' : ''}`} onClick={() => setSection('Configurações')}><Settings2 size={18} />{sidebarOpen && <span>Configurações</span>}</button>}
           <div className="profile-row"><div className="profile-avatar">RS</div>{sidebarOpen && <div className="workspace-copy"><strong>Rafael Silva</strong><span>Administrador</span></div>}</div>
         </div>
       </aside>
@@ -128,7 +131,7 @@ function App() {
           {section === 'Produção' && <ProductionViewLive token={token} search={search} setSearch={setSearch} filteredOrders={filteredOrders} onCreated={(order) => setOrdersData((current) => [order, ...current])} />}
           {section === 'Estoque' && <StockViewCrud token={token} inventory={inventoryData} onCreated={(item) => setInventoryData((current) => [...current, item])} onUpdated={(item) => setInventoryData((current) => current.map((currentItem) => currentItem.id === item.id ? item : currentItem))} onDeleted={(id) => setInventoryData((current) => current.filter((item) => item.id !== id))} />}
           {section === 'Movimentações' && <MovementsView token={token} inventory={inventoryData} onChanged={() => apiFetch<InventoryItem[]>('/inventory', token).then(setInventoryData)} />}
-          {section === 'Nota fiscal de entrada' && <InvoiceViewWithPayable token={token} inventory={inventoryData} invoices={invoices} onLoaded={setInvoices} onReceived={(invoice) => { setInvoices((current) => current.map((currentInvoice) => currentInvoice.id === invoice.id ? invoice : currentInvoice)); apiFetch<InventoryItem[]>('/inventory', token).then(setInventoryData) }} />}
+          {section === 'Nota fiscal de entrada' && <InvoiceEntryScreen token={token} inventory={inventoryData} invoices={invoices} onLoaded={setInvoices} onChanged={(invoice) => { setInvoices((current) => current.map((currentInvoice) => currentInvoice.id === invoice.id ? invoice : currentInvoice)); apiFetch<InventoryItem[]>('/inventory', token).then(setInventoryData) }} />}
           {section === 'Nota fiscal de venda' && <WipView title="Nota fiscal de venda" description="Este módulo está reservado para a próxima etapa comercial." />}
           {section === 'Fornecedores' && <PartnerView token={token} kind="suppliers" />}
           {section === 'Clientes' && <PartnerView token={token} kind="customers" />}
@@ -141,31 +144,6 @@ function App() {
       </main>
     </div>
   )
-}
-
-function LoginScreen({ onLogin }: { onLogin: (token: string) => void }) {
-  const [email, setEmail] = useState('admin@atelier.com')
-  const [password, setPassword] = useState('atelier123')
-  const [error, setError] = useState('')
-  const [loading, setLoading] = useState(false)
-
-  async function submit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    setError('')
-    setLoading(true)
-    try {
-      const response = await fetch(`${API_URL}/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password }) })
-      if (!response.ok) throw new Error('E-mail ou senha inválidos')
-      const result = await response.json() as { access_token: string }
-      onLogin(result.access_token)
-    } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : 'Não foi possível conectar à API')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  return <div className="login-shell"><div className="login-art"><div className="brand-lockup"><div className="brand-mark"><Sparkles size={18} strokeWidth={2.5} /></div><div><strong>ATELIER</strong><span>INDUSTRIAL OS</span></div></div><div className="login-art-copy"><span className="eyebrow">Controle que acompanha o ritmo</span><h1>Da madeira ao móvel pronto.</h1><p>Uma visão única para produção, estoque e margem da sua fábrica.</p></div><div className="login-art-footer"><span>PCP · CUSTOS · ESTOQUE</span><span>v0.1 MVP</span></div></div><div className="login-panel"><div className="login-panel-inner"><div className="mobile-brand"><div className="brand-mark"><Sparkles size={18} /></div><strong>ATELIER</strong></div><span className="eyebrow">Acesso ao workspace</span><h2>Bem-vindo de volta</h2><p>Entre para acompanhar a operação da Ateliê Móveis.</p><form onSubmit={submit}><label>E-mail<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" required /></label><label>Senha<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" required /></label>{error && <div className="login-error"><AlertTriangle size={15} />{error}</div>}<button className="primary-button login-button" disabled={loading}>{loading ? 'Conectando...' : 'Entrar no sistema'}<ChevronRight size={16} /></button></form><small className="login-hint">Demo MVP: admin@atelier.com · atelier123</small></div></div></div>
 }
 
 function ProductionViewLive({ token, search, setSearch, filteredOrders, onCreated }: { token: string; search: string; setSearch: (value: string) => void; filteredOrders: ProductionOrder[]; onCreated: (order: ProductionOrder) => void }) {
@@ -263,6 +241,7 @@ function InvoiceViewWithPayable({ token, inventory, invoices, onLoaded, onReceiv
     } catch (requestError) { setError(requestError instanceof Error ? requestError.message : 'Erro ao cadastrar NF') } finally { setSaving(false) }
   }
   async function receive(invoice: PurchaseInvoice) { setReceiving(invoice.id); setError(''); try { onReceived(await apiFetch<PurchaseInvoice>(`/invoices/${invoice.id}/receive`, token, { method: 'POST' })) } catch (requestError) { setError(requestError instanceof Error ? requestError.message : 'Erro ao dar entrada e criar conta a pagar') } finally { setReceiving(null) } }
+  async function cancel(invoice: PurchaseInvoice) { if (!window.confirm(`Cancelar NF ${invoice.number}? O estoque será estornado quando aplicável.`)) return; setReceiving(invoice.id); setError(''); try { onReceived(await apiFetch<PurchaseInvoice>(`/invoices/${invoice.id}/cancel`, token, { method: 'POST' })) } catch (requestError) { setError(requestError instanceof Error ? requestError.message : 'Erro ao cancelar NF') } finally { setReceiving(null) } }
   return <><PageHeading eyebrow="Fiscal · Almoxarifado" title="Notas fiscais de entrada" description="A confirmação da NF atualiza o estoque e cria automaticamente uma conta a pagar." action={<button className="primary-button" onClick={() => setShowForm(true)}><Plus size={17} /> Nova NF de entrada</button>} />{error && <div className="api-error"><AlertTriangle size={15} />{error}</div>}{showForm && <section className="panel create-panel"><div className="panel-header"><div><span className="panel-kicker">Recebimento fiscal</span><h2>Registrar nota fiscal</h2></div><button className="icon-button" onClick={() => setShowForm(false)} aria-label="Fechar"><X size={16} /></button></div><form className="create-form invoice-form" onSubmit={submit}><label>Número da NF<input required value={form.number} onChange={(event) => setForm({ ...form, number: event.target.value })} /></label><label>Fornecedor<div className="autocomplete"><input required value={form.supplier} onChange={(event) => { setForm({ ...form, supplier: event.target.value }); setSupplierQuery(event.target.value); setSupplier(null) }} placeholder="Digite nome, fantasia ou CNPJ" />{suggestions.length > 0 && <div className="suggestion-list">{suggestions.map((item) => <button type="button" key={item.id} onClick={() => { setForm({ ...form, supplier: item.trade_name }); setSupplier(item); setSupplierQuery(item.trade_name); setSuggestions([]) }}><strong>{item.trade_name}</strong><small>{item.legal_name} · {item.document}</small></button>)}</div>}</div></label><label>Data de emissão<input required value={form.issue_date} onChange={(event) => setForm({ ...form, issue_date: event.target.value })} /></label><label>Data de vencimento<input required value={form.due_date} onChange={(event) => setForm({ ...form, due_date: event.target.value })} placeholder="09/10/2026" /></label><label>Descrição<input required value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></label><label>Forma de pagamento<select value={form.payment_method} onChange={(event) => setForm({ ...form, payment_method: event.target.value })}><option>Boleto</option><option>PIX</option><option>Transferência</option><option>Cartão</option><option>Dinheiro</option></select></label><label>Categoria<select value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })}><option>Insumos</option><option>Fretes</option><option>Serviços</option><option>Impostos</option><option>Outros</option></select></label><label>Código de barras<input value={form.barcode} onChange={(event) => setForm({ ...form, barcode: event.target.value })} /></label><label>Observações<input value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} /></label><div className="invoice-items-field"><div className="invoice-items-heading"><strong>Itens da nota ({items.length})</strong><button type="button" className="secondary-button" onClick={() => setItems([...items, { sku: inventory[0]?.sku ?? '', quantity: '1', unit_cost: '0' }])}><Plus size={14} /> Adicionar item</button></div>{items.map((item, index) => <div className="invoice-item-editor" key={index}><select required value={item.sku} onChange={(event) => updateItem(index, 'sku', event.target.value)}>{inventory.map((stockItem) => <option key={stockItem.sku} value={stockItem.sku}>{stockItem.sku} · {stockItem.name}</option>)}</select><input required min="0.01" type="number" step="0.01" value={item.quantity} onChange={(event) => updateItem(index, 'quantity', event.target.value)} placeholder="Quantidade" /><input required min="0.01" type="number" step="0.01" value={item.unit_cost} onChange={(event) => updateItem(index, 'unit_cost', event.target.value)} placeholder="Custo unitário" />{items.length > 1 && <button type="button" className="icon-button" onClick={() => setItems(items.filter((_, itemIndex) => itemIndex !== index))} aria-label="Remover item"><X size={15} /></button>}</div>)}</div><button className="primary-button" disabled={saving}>{saving ? 'Registrando...' : 'Salvar NF pendente'}</button></form></section>}<section className="panel full-panel"><div className="panel-header"><div><span className="panel-kicker">Documentos recentes</span><h2>Entradas fiscais</h2></div><span className="draft-status">{invoices.length} documentos</span></div><div className="invoice-list">{invoices.length === 0 ? <div className="empty-state"><Receipt size={22} /><strong>Nenhuma NF registrada</strong><span>Cadastre a primeira nota para iniciar uma entrada de estoque.</span></div> : invoices.map((invoice) => <div className="invoice-row" key={invoice.id}><div className="invoice-icon"><Receipt size={17} /></div><div className="invoice-main"><strong>NF {invoice.number}</strong><small>{invoice.supplier} · {invoice.issue_date}</small></div><div><strong>{formatBRL(Number(invoice.total))}</strong><small>Vence {invoice.due_date || invoice.issue_date}</small></div><span className={`pill-status ${invoice.status === 'Recebida' ? 'concluída' : 'aguardando'}`}>{invoice.status}</span>{invoice.status === 'Pendente' && <button className="secondary-button" disabled={receiving === invoice.id} onClick={() => receive(invoice)}>{receiving === invoice.id ? 'Processando...' : 'Dar entrada + pagar'}</button>}</div>)}</div></section></>
 }
 

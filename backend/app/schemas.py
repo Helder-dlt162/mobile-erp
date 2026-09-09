@@ -1,7 +1,8 @@
 from decimal import Decimal
+from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 
 class Token(BaseModel):
@@ -96,7 +97,7 @@ class PayableCreate(BaseModel):
     invoice_id: int | None = None
     supplier_id: int | None = None
     supplier_name: str = Field(default="", max_length=180)
-    due_date: str = Field(min_length=8, max_length=20)
+    due_date: str = Field(default="", max_length=20)
     purchase_date: str = Field(min_length=8, max_length=20)
     amount: Decimal = Field(gt=0)
     payment_method: str = Field(min_length=2, max_length=40)
@@ -208,6 +209,17 @@ class PurchaseInvoiceCreate(BaseModel):
     notes: str = Field(default="", max_length=255)
     items: list[InvoiceItemCreate] = Field(min_length=1)
 
+    @field_validator("issue_date")
+    @classmethod
+    def validate_dates(cls, value: str) -> str:
+        for format_string in ("%Y-%m-%d", "%d/%m/%Y"):
+            try:
+                datetime.strptime(value, format_string)
+                return value
+            except ValueError:
+                continue
+        raise ValueError("Use uma data válida no formato AAAA-MM-DD")
+
 
 class PurchaseInvoiceRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -222,9 +234,14 @@ class PurchaseInvoiceRead(BaseModel):
     barcode: str
     category: str
     notes: str
+    cancellation_reason: str | None = None
     status: str
     total: Decimal
     items: list[InvoiceItemRead]
+
+
+class InvoiceCancellation(BaseModel):
+    reason: str = Field(min_length=3, max_length=255)
 
 
 class DashboardRead(BaseModel):

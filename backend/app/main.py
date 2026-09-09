@@ -34,6 +34,7 @@ def migrate_existing_schema() -> None:
         "barcode": "VARCHAR(80) DEFAULT ''",
         "category": "VARCHAR(80) DEFAULT 'Insumos'",
         "notes": "VARCHAR(255) DEFAULT ''",
+        "cancellation_reason": "VARCHAR(255) DEFAULT ''",
     }.items():
         if column not in invoice_columns:
             with engine.begin() as connection:

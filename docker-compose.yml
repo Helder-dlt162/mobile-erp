@@ -1,0 +1,36 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: atelier-erp-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: atelier_erp
+      POSTGRES_USER: atelier
+      POSTGRES_PASSWORD: atelier
+    ports:
+      - "5432:5432"
+    volumes:
+      - atelier_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U atelier -d atelier_erp"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: ./backend
+    container_name: atelier-erp-api
+    restart: unless-stopped
+    environment:
+      APP_ENV: development
+      DATABASE_URL: postgresql+psycopg://atelier:atelier@postgres:5432/atelier_erp
+      JWT_SECRET: change-this-secret-in-production
+      CORS_ORIGINS: http://localhost:5173
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  atelier_postgres_data:

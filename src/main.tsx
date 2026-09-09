@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import {
   AlertTriangle,
@@ -33,6 +33,8 @@ type Section = 'Visão geral' | 'Produção' | 'Estoque' | 'Custos e preços'
 
 type OrderStatus = 'Em produção' | 'Aguardando' | 'Concluída'
 
+const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000/api'
+
 interface ProductionOrder {
   id: string
   product: string
@@ -43,19 +45,56 @@ interface ProductionOrder {
   status: OrderStatus
 }
 
-const orders: ProductionOrder[] = [
+interface InventoryItem {
+  name: string
+  sku: string
+  stock: number
+  unit: string
+  minimum_stock: number
+  state: string
+  color: string
+  last_entry: string
+}
+
+interface DashboardData {
+  production_month: number
+  occupancy: number
+  average_cost: number
+  contribution_margin: number
+  orders: Array<{ code: string; product: string; quantity: number; progress: number; station: string; due: string; status: OrderStatus }>
+  inventory: InventoryItem[]
+}
+
+const demoOrders: ProductionOrder[] = [
   { id: 'OP-2408', product: 'Cadeira Lina · Natural', quantity: 180, progress: 72, station: 'Montagem', due: 'Hoje, 16:00', status: 'Em produção' },
   { id: 'OP-2407', product: 'Banqueta Oca · Nogueira', quantity: 96, progress: 41, station: 'Usinagem', due: 'Amanhã, 10:00', status: 'Em produção' },
   { id: 'OP-2406', product: 'Cadeira Lina · Preta', quantity: 240, progress: 100, station: 'Expedição', due: 'Concluída', status: 'Concluída' },
   { id: 'OP-2405', product: 'Banqueta Oca · Natural', quantity: 120, progress: 0, station: 'Corte', due: '12 set, 08:00', status: 'Aguardando' },
 ]
 
-const inventory = [
-  { name: 'Madeira Tauari · 25 mm', sku: 'MAT-001', stock: '18,4 m³', level: 82, state: 'Normal', color: 'green' },
-  { name: 'Espuma D28 · 40 mm', sku: 'MAT-024', stock: '132 un', level: 58, state: 'Normal', color: 'green' },
-  { name: 'Tecido Linho Cru', sku: 'MAT-017', stock: '38 m', level: 23, state: 'Repor em breve', color: 'yellow' },
-  { name: 'Verniz PU Acetinado', sku: 'MAT-031', stock: '12 L', level: 9, state: 'Abaixo do mínimo', color: 'red' },
+const demoInventory: InventoryItem[] = [
+  { name: 'Madeira Tauari · 25 mm', sku: 'MAT-001', stock: 18.4, unit: 'm³', minimum_stock: 8, state: 'Normal', color: 'green', last_entry: '08 set' },
+  { name: 'Espuma D28 · 40 mm', sku: 'MAT-024', stock: 132, unit: 'un', minimum_stock: 60, state: 'Normal', color: 'green', last_entry: '08 set' },
+  { name: 'Tecido Linho Cru', sku: 'MAT-017', stock: 38, unit: 'm', minimum_stock: 30, state: 'Repor em breve', color: 'yellow', last_entry: '08 set' },
+  { name: 'Verniz PU Acetinado', sku: 'MAT-031', stock: 12, unit: 'L', minimum_stock: 20, state: 'Abaixo do mínimo', color: 'red', last_entry: '08 set' },
 ]
+
+async function apiFetch<T>(path: string, token: string, options?: RequestInit): Promise<T> {
+  const response = await fetch(`${API_URL}${path}`, { ...options, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...options?.headers } })
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({})) as { detail?: string }
+    throw new Error(body.detail ?? 'Não foi possível concluir a operação')
+  }
+  return response.json() as Promise<T>
+}
+
+function mapOrders(data: DashboardData['orders']): ProductionOrder[] {
+  return data.map((order) => ({ id: order.code, product: order.product, quantity: order.quantity, progress: order.progress, station: order.station, due: order.due, status: order.status }))
+}
+
+function inventoryLevel(item: InventoryItem) {
+  return item.minimum_stock > 0 ? Math.min(100, Math.round((item.stock / (item.minimum_stock * 2)) * 100)) : 100
+}
 
 const navItems: { label: Section; icon: typeof LayoutDashboard }[] = [
   { label: 'Visão geral', icon: LayoutDashboard },
@@ -69,6 +108,7 @@ function formatBRL(value: number) {
 }
 
 function App() {
+  const [token, setToken] = useState(() => localStorage.getItem('atelier_access_token'))
   const [section, setSection] = useState<Section>('Visão geral')
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [search, setSearch] = useState('')
@@ -77,15 +117,32 @@ function App() {
   const [cost, setCost] = useState(148.5)
   const [margin, setMargin] = useState(32)
   const [tax, setTax] = useState(12.45)
+  const [ordersData, setOrdersData] = useState<ProductionOrder[]>(demoOrders)
+  const [inventoryData, setInventoryData] = useState<InventoryItem[]>(demoInventory)
+  const [loadingData, setLoadingData] = useState(false)
+  const [dataError, setDataError] = useState('')
+
+  useEffect(() => {
+    if (!token) return
+    setLoadingData(true)
+    apiFetch<DashboardData>('/dashboard', token)
+      .then((dashboard) => { setOrdersData(mapOrders(dashboard.orders)); setInventoryData(dashboard.inventory) })
+      .catch((error: unknown) => setDataError(error instanceof Error ? error.message : 'Falha ao carregar dados'))
+      .finally(() => setLoadingData(false))
+  }, [token])
 
   const filteredOrders = useMemo(() => {
     const term = search.toLowerCase().trim()
-    if (!term) return orders
-    return orders.filter((order) => `${order.id} ${order.product} ${order.station}`.toLowerCase().includes(term))
-  }, [search])
+    if (!term) return ordersData
+    return ordersData.filter((order) => `${order.id} ${order.product} ${order.station}`.toLowerCase().includes(term))
+  }, [ordersData, search])
 
   const salePrice = cost / (1 - (margin + tax) / 100)
   const contribution = salePrice - cost - salePrice * (tax / 100)
+
+  if (!token) {
+    return <LoginScreen onLogin={(accessToken) => { localStorage.setItem('atelier_access_token', accessToken); setToken(accessToken) }} />
+  }
 
   return (
     <div className="app-shell">
@@ -120,26 +177,53 @@ function App() {
       <main className="main-content">
         <header className="topbar">
           <div className="topbar-left"><button className="icon-button menu-button" onClick={() => setSidebarOpen(!sidebarOpen)} aria-label="Alternar menu">{sidebarOpen ? <PanelLeftClose size={18} /> : <PanelLeftOpen size={18} />}</button><span className="breadcrumb">Operação <ChevronRight size={14} /> <strong>{section}</strong></span></div>
-          <div className="topbar-actions"><div className="status-pill"><span className="status-dot" /> Sistema online</div><button className="icon-button notification-button" onClick={() => setShowNotifications(!showNotifications)} aria-label="Notificações"><Bell size={18} /><span /></button><div className="topbar-date">09 setembro 2026</div></div>
+          <div className="topbar-actions"><div className="status-pill"><span className="status-dot" /> API conectada</div><button className="icon-button notification-button" onClick={() => setShowNotifications(!showNotifications)} aria-label="Notificações"><Bell size={18} /><span /></button><button className="logout-button" onClick={() => { localStorage.removeItem('atelier_access_token'); setToken(null) }}>Sair</button><div className="topbar-date">09 setembro 2026</div></div>
           {showNotifications && <div className="notification-popover"><div className="popover-heading"><strong>Notificações</strong><span>3 novas</span></div><div className="notification-item"><AlertTriangle size={16} /><div><strong>Verniz PU abaixo do mínimo</strong><small>Estoque · há 12 min</small></div></div><div className="notification-item"><Truck size={16} /><div><strong>Recebimento NF 02841 conferido</strong><small>Almoxarifado · há 42 min</small></div></div><div className="notification-item"><ShieldCheck size={16} /><div><strong>OP-2406 encerrada com sucesso</strong><small>Produção · há 1 h</small></div></div></div>}
         </header>
 
         <div className="page-wrap">
-          {section === 'Visão geral' && <Overview onOpenProduction={() => setSection('Produção')} onOpenStock={() => setSection('Estoque')} selectedLine={selectedLine} setSelectedLine={setSelectedLine} />}
-          {section === 'Produção' && <ProductionView search={search} setSearch={setSearch} filteredOrders={filteredOrders} />}
-          {section === 'Estoque' && <StockView />}
-          {section === 'Custos e preços' && <PricingView cost={cost} setCost={setCost} margin={margin} setMargin={setMargin} tax={tax} setTax={setTax} salePrice={salePrice} contribution={contribution} />}
+          {dataError && <div className="api-error"><AlertTriangle size={15} /> {dataError}</div>}
+          {loadingData && <div className="data-loading">Sincronizando dados da operação...</div>}
+          {section === 'Visão geral' && <Overview orders={ordersData} inventory={inventoryData} onOpenProduction={() => setSection('Produção')} onOpenStock={() => setSection('Estoque')} selectedLine={selectedLine} setSelectedLine={setSelectedLine} />}
+          {section === 'Produção' && <ProductionView token={token} search={search} setSearch={setSearch} filteredOrders={filteredOrders} onCreated={(order) => setOrdersData((current) => [order, ...current])} />}
+          {section === 'Estoque' && <StockView token={token} inventory={inventoryData} onCreated={(item) => setInventoryData((current) => [...current, item])} />}
+          {section === 'Custos e preços' && <PricingView token={token} cost={cost} setCost={setCost} margin={margin} setMargin={setMargin} tax={tax} setTax={setTax} salePrice={salePrice} contribution={contribution} />}
         </div>
       </main>
     </div>
   )
 }
 
+function LoginScreen({ onLogin }: { onLogin: (token: string) => void }) {
+  const [email, setEmail] = useState('admin@atelier.com')
+  const [password, setPassword] = useState('atelier123')
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setError('')
+    setLoading(true)
+    try {
+      const response = await fetch(`${API_URL}/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password }) })
+      if (!response.ok) throw new Error('E-mail ou senha inválidos')
+      const result = await response.json() as { access_token: string }
+      onLogin(result.access_token)
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Não foi possível conectar à API')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return <div className="login-shell"><div className="login-art"><div className="brand-lockup"><div className="brand-mark"><Sparkles size={18} strokeWidth={2.5} /></div><div><strong>ATELIER</strong><span>INDUSTRIAL OS</span></div></div><div className="login-art-copy"><span className="eyebrow">Controle que acompanha o ritmo</span><h1>Da madeira ao móvel pronto.</h1><p>Uma visão única para produção, estoque e margem da sua fábrica.</p></div><div className="login-art-footer"><span>PCP · CUSTOS · ESTOQUE</span><span>v0.1 MVP</span></div></div><div className="login-panel"><div className="login-panel-inner"><div className="mobile-brand"><div className="brand-mark"><Sparkles size={18} /></div><strong>ATELIER</strong></div><span className="eyebrow">Acesso ao workspace</span><h2>Bem-vindo de volta</h2><p>Entre para acompanhar a operação da Ateliê Móveis.</p><form onSubmit={submit}><label>E-mail<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" required /></label><label>Senha<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" required /></label>{error && <div className="login-error"><AlertTriangle size={15} />{error}</div>}<button className="primary-button login-button" disabled={loading}>{loading ? 'Conectando...' : 'Entrar no sistema'}<ChevronRight size={16} /></button></form><small className="login-hint">Demo MVP: admin@atelier.com · atelier123</small></div></div></div>
+}
+
 function PageHeading({ eyebrow, title, description, action }: { eyebrow: string; title: string; description: string; action?: React.ReactNode }) {
   return <div className="page-heading"><div><div className="eyebrow">{eyebrow}</div><h1>{title}</h1><p>{description}</p></div>{action}</div>
 }
 
-function Overview({ onOpenProduction, onOpenStock, selectedLine, setSelectedLine }: { onOpenProduction: () => void; onOpenStock: () => void; selectedLine: string; setSelectedLine: (value: string) => void }) {
+function Overview({ orders, inventory, onOpenProduction, onOpenStock, selectedLine, setSelectedLine }: { orders: ProductionOrder[]; inventory: InventoryItem[]; onOpenProduction: () => void; onOpenStock: () => void; selectedLine: string; setSelectedLine: (value: string) => void }) {
   return <>
     <PageHeading eyebrow="Terça-feira, 09 de setembro" title="Bom dia, Rafael" description="A fábrica está em ritmo forte. Aqui está o pulso da sua operação." action={<button className="primary-button" onClick={onOpenProduction}><Plus size={17} /> Nova ordem de produção</button>} />
     <div className="alert-banner"><div className="alert-icon"><AlertTriangle size={18} /></div><div><strong>Configuração fiscal requer atenção</strong><span>O regime informado mistura Lucro Real e Simples Nacional. Confirme a opção tributária antes de publicar preços.</span></div><button onClick={() => alert('A parametrização fiscal será aberta na Etapa 3.')}>Revisar agora <ChevronRight size={15} /></button></div>
@@ -164,4 +248,7 @@ function PricingView({ cost, setCost, margin, setMargin, tax, setTax, salePrice,
 
 export default App
 
-createRoot(document.getElementById('root')!).render(<App />)
+const rootHolder = globalThis as typeof globalThis & { __atelierRoot?: ReturnType<typeof createRoot> }
+const root = rootHolder.__atelierRoot ?? createRoot(document.getElementById('root')!)
+rootHolder.__atelierRoot = root
+root.render(<App />)

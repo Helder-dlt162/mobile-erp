@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import inspect, text
 
-from app.api import auth, dashboard, finance, inventory, invoices, movements, partners, pricing, production, settings as settings_api
+from app.api import auth, dashboard, finance, inventory, invoices, movements, partners, pricing, production, settings as settings_api, users
 from app.core.config import get_settings
 from app.db import Base, SessionLocal, engine
 from app.middleware import RequestAuditMiddleware
@@ -19,6 +19,10 @@ def migrate_existing_schema() -> None:
     if "supplier_id" not in invoice_columns:
         with engine.begin() as connection:
             connection.execute(text("ALTER TABLE purchase_invoices ADD COLUMN supplier_id INTEGER REFERENCES suppliers(id)"))
+    user_columns = {column["name"] for column in inspector.get_columns("users")}
+    if "permissions" not in user_columns:
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE users ADD COLUMN permissions JSON DEFAULT '[]'"))
     payable_columns = {column["name"] for column in inspector.get_columns("payable_accounts")}
     if "invoice_id" not in payable_columns:
         with engine.begin() as connection:
@@ -61,6 +65,7 @@ app.include_router(partners.customers_router, prefix="/api")
 app.include_router(finance.router, prefix="/api")
 app.include_router(movements.router, prefix="/api")
 app.include_router(settings_api.router, prefix="/api")
+app.include_router(users.router, prefix="/api")
 app.include_router(pricing.router, prefix="/api")
 
 

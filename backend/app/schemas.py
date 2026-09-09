@@ -21,6 +21,22 @@ class UserRead(BaseModel):
     name: str
     email: EmailStr
     role: str
+    permissions: list[str] = []
+
+
+class UserCreate(BaseModel):
+    name: str = Field(min_length=2, max_length=120)
+    email: EmailStr
+    password: str = Field(min_length=6, max_length=128)
+    permissions: list[str] = Field(default_factory=list)
+
+
+class UserUpdate(BaseModel):
+    name: str = Field(min_length=2, max_length=120)
+    email: EmailStr
+    password: str | None = Field(default=None, min_length=6, max_length=128)
+    permissions: list[str] = Field(default_factory=list)
+    is_active: bool = True
 
 
 class AppSettingRead(BaseModel):

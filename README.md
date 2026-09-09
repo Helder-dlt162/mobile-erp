@@ -37,6 +37,7 @@ Acesse `http://localhost:5173/`.
 - Ao confirmar a NF de entrada, o estoque é atualizado e uma conta a pagar é criada automaticamente com vencimento e forma de pagamento.
 - Financeiro inicial com contas a pagar, vencimento, pagamento e baixa.
 - Configurações persistentes separadas por módulo, com preparação de parâmetros SEFAZ.
+- Gestão de usuários com permissões por módulo e Funcionários marcado como WIP.
 - Testes automatizados de saúde, autenticação, autorização, dashboard e precificação.
 
 ## Desenvolvimento local da API

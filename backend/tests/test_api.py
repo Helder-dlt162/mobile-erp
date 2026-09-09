@@ -129,6 +129,17 @@ def test_receiving_invoice_creates_payable() -> None:
     assert payable["payment_method"] == "PIX"
 
 
+def test_admin_can_create_user_with_module_permissions() -> None:
+    login = client.post("/api/auth/login", json={"email": "admin@atelier.com", "password": "atelier123"})
+    token = login.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    created = client.post("/api/users", headers=headers, json={"name": "Operador PCP", "email": "pcp@atelier.com", "password": "operador123", "permissions": ["dashboard", "production"]})
+    assert created.status_code == 201
+    assert created.json()["permissions"] == ["dashboard", "production"]
+    listed = client.get("/api/users", headers=headers)
+    assert any(user["email"] == "pcp@atelier.com" for user in listed.json())
+
+
 def test_stock_movement_updates_balance_and_rejects_overdraft() -> None:
     login = client.post("/api/auth/login", json={"email": "admin@atelier.com", "password": "atelier123"})
     token = login.json()["access_token"]

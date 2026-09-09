@@ -32,7 +32,7 @@ import {
 } from 'lucide-react'
 import './styles.css'
 
-type Section = 'Visão geral' | 'Produção' | 'Estoque' | 'Movimentações' | 'Nota fiscal de entrada' | 'Nota fiscal de venda' | 'Fornecedores' | 'Clientes' | 'Contas a pagar' | 'Configurações'
+type Section = 'Visão geral' | 'Produção' | 'Estoque' | 'Movimentações' | 'Nota fiscal de entrada' | 'Nota fiscal de venda' | 'Fornecedores' | 'Clientes' | 'Contas a pagar' | 'Configurações' | 'Usuários' | 'Funcionários'
 
 type OrderStatus = 'Em produção' | 'Aguardando' | 'Concluída'
 
@@ -124,6 +124,14 @@ interface AppSetting {
   payload: Record<string, string | number | boolean>
 }
 
+interface AppUser {
+  id: number
+  name: string
+  email: string
+  role: string
+  permissions: string[]
+}
+
 const demoOrders: ProductionOrder[] = [
   { id: 'OP-2408', product: 'Cadeira Lina · Natural', quantity: 180, progress: 72, station: 'Montagem', due: 'Hoje, 16:00', status: 'Em produção' },
   { id: 'OP-2407', product: 'Banqueta Oca · Nogueira', quantity: 96, progress: 41, station: 'Usinagem', due: 'Amanhã, 10:00', status: 'Em produção' },
@@ -177,6 +185,8 @@ function App() {
   const [showNotifications, setShowNotifications] = useState(false)
   const [fiscalMenuOpen, setFiscalMenuOpen] = useState(true)
   const [financeMenuOpen, setFinanceMenuOpen] = useState(true)
+  const [usersMenuOpen, setUsersMenuOpen] = useState(true)
+  const [currentUser, setCurrentUser] = useState<AppUser | null>(null)
   const [cost, setCost] = useState(148.5)
   const [margin, setMargin] = useState(32)
   const [tax, setTax] = useState(12.45)
@@ -188,6 +198,7 @@ function App() {
 
   useEffect(() => {
     if (!token) return
+    apiFetch<AppUser>('/auth/me', token).then(setCurrentUser).catch(() => setCurrentUser(null))
     setLoadingData(true)
     apiFetch<DashboardData>('/dashboard', token)
       .then((dashboard) => { setOrdersData(mapOrders(dashboard.orders)); setInventoryData(dashboard.inventory) })
@@ -203,6 +214,8 @@ function App() {
 
   const salePrice = cost / (1 - (margin + tax) / 100)
   const contribution = salePrice - cost - salePrice * (tax / 100)
+  const canSee = (permission: string) => currentUser?.role === 'admin' || Boolean(currentUser?.permissions?.includes(permission))
+  const sectionPermission: Record<string, string> = { 'Visão geral': 'dashboard', Produção: 'production', Estoque: 'inventory', Movimentações: 'movements', Fornecedores: 'partners', Clientes: 'partners', 'Contas a pagar': 'finance', Configurações: 'settings' }
 
   if (!token) {
     return <LoginScreen onLogin={(accessToken) => { localStorage.setItem('atelier_access_token', accessToken); setToken(accessToken) }} />
@@ -220,23 +233,22 @@ function App() {
           {sidebarOpen && <><div className="workspace-copy"><strong>Ateliê Móveis</strong><span>Unidade principal</span></div><ChevronRight size={15} /></>}
         </div>
         <nav className="main-nav" aria-label="Navegação principal">
-          {navItems.map(({ label, icon: Icon }) => (
+          {navItems.filter(({ label }) => canSee(sectionPermission[label])).map(({ label, icon: Icon }) => (
             <button key={label} className={`nav-item ${section === label ? 'active' : ''}`} onClick={() => setSection(label)} title={label}>
               <Icon size={18} />{sidebarOpen && <span>{label}</span>}{sidebarOpen && label === 'Estoque' && <span className="nav-badge">3</span>}
             </button>
           ))}
-          <button className={`nav-item ${(section === 'Nota fiscal de entrada' || section === 'Nota fiscal de venda') ? 'active' : ''}`} onClick={() => setFiscalMenuOpen(!fiscalMenuOpen)} title="Notas fiscais"><Receipt size={18} />{sidebarOpen && <span>Notas fiscais</span>}{sidebarOpen && (fiscalMenuOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />)}</button>
-          {sidebarOpen && fiscalMenuOpen && <div className="nav-submenu"><button className={`nav-subitem ${section === 'Nota fiscal de entrada' ? 'active' : ''}`} onClick={() => setSection('Nota fiscal de entrada')}>NF de entrada</button><button className="nav-subitem wip" onClick={() => setSection('Nota fiscal de venda')}>NF de venda <small>WIP</small></button></div>}
-          <button className={`nav-item ${section === 'Contas a pagar' ? 'active' : ''}`} onClick={() => setFinanceMenuOpen(!financeMenuOpen)} title="Financeiro"><CircleDollarSign size={18} />{sidebarOpen && <span>Financeiro</span>}{sidebarOpen && (financeMenuOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />)}</button>
-          {sidebarOpen && financeMenuOpen && <div className="nav-submenu"><button className={`nav-subitem ${section === 'Contas a pagar' ? 'active' : ''}`} onClick={() => setSection('Contas a pagar')}>Contas a pagar</button></div>}
+          {canSee('purchasing') && <><button className={`nav-item ${(section === 'Nota fiscal de entrada' || section === 'Nota fiscal de venda') ? 'active' : ''}`} onClick={() => setFiscalMenuOpen(!fiscalMenuOpen)} title="Notas fiscais"><Receipt size={18} />{sidebarOpen && <span>Notas fiscais</span>}{sidebarOpen && (fiscalMenuOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />)}</button>{sidebarOpen && fiscalMenuOpen && <div className="nav-submenu"><button className={`nav-subitem ${section === 'Nota fiscal de entrada' ? 'active' : ''}`} onClick={() => setSection('Nota fiscal de entrada')}>NF de entrada</button><button className="nav-subitem wip" onClick={() => setSection('Nota fiscal de venda')}>NF de venda <small>WIP</small></button></div>}</>}
+          {canSee('finance') && <><button className={`nav-item ${section === 'Contas a pagar' ? 'active' : ''}`} onClick={() => setFinanceMenuOpen(!financeMenuOpen)} title="Financeiro"><CircleDollarSign size={18} />{sidebarOpen && <span>Financeiro</span>}{sidebarOpen && (financeMenuOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />)}</button>{sidebarOpen && financeMenuOpen && <div className="nav-submenu"><button className={`nav-subitem ${section === 'Contas a pagar' ? 'active' : ''}`} onClick={() => setSection('Contas a pagar')}>Contas a pagar</button></div>}</>}
         </nav>
         {sidebarOpen && <div className="nav-label">Gestão</div>}
         <nav className="secondary-nav">
-          <button className={`nav-item ${section === 'Movimentações' ? 'active' : ''}`} onClick={() => setSection('Movimentações')}><PackageCheck size={18} />{sidebarOpen && <span>Movimentações</span>}</button>
+          {canSee('movements') && <button className={`nav-item ${section === 'Movimentações' ? 'active' : ''}`} onClick={() => setSection('Movimentações')}><PackageCheck size={18} />{sidebarOpen && <span>Movimentações</span>}</button>}
           <button className="nav-item" onClick={() => setSection('Relatórios' as Section)}><BarChart3 size={18} />{sidebarOpen && <span>Relatórios</span>}{sidebarOpen && <small className="nav-wip">WIP</small>}</button>
         </nav>
         <div className="sidebar-bottom">
-          <button className={`nav-item ${section === 'Configurações' ? 'active' : ''}`} onClick={() => setSection('Configurações')}><Settings2 size={18} />{sidebarOpen && <span>Configurações</span>}</button>
+          {canSee('settings') && <button className={`nav-item ${section === 'Configurações' ? 'active' : ''}`} onClick={() => setSection('Configurações')}><Settings2 size={18} />{sidebarOpen && <span>Configurações</span>}</button>}
+          {currentUser?.role === 'admin' && <><button className={`nav-item ${(section === 'Usuários' || section === 'Funcionários') ? 'active' : ''}`} onClick={() => setUsersMenuOpen(!usersMenuOpen)}><Users size={18} />{sidebarOpen && <span>Usuários</span>}{sidebarOpen && (usersMenuOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />)}</button>{sidebarOpen && usersMenuOpen && <div className="nav-submenu"><button className={`nav-subitem ${section === 'Usuários' ? 'active' : ''}`} onClick={() => setSection('Usuários')}>Usuários</button><button className="nav-subitem wip" onClick={() => setSection('Funcionários')}>Funcionários <small>WIP</small></button></div>}</>}
           <div className="profile-row"><div className="profile-avatar">RS</div>{sidebarOpen && <div className="workspace-copy"><strong>Rafael Silva</strong><span>Administrador</span></div>}</div>
         </div>
       </aside>
@@ -261,6 +273,8 @@ function App() {
           {section === 'Clientes' && <PartnerView token={token} kind="customers" />}
           {section === 'Contas a pagar' && <PayablesView token={token} />}
           {section === 'Configurações' && <SettingsView token={token} />}
+          {section === 'Usuários' && <UsersView token={token} />}
+          {section === 'Funcionários' && <WipView title="Funcionários" description="O cadastro de funcionários será implementado na próxima etapa." />}
           {section === ('Relatórios' as Section) && <WipView title="Relatórios" description="Os relatórios gerenciais serão liberados na próxima etapa." />}
         </div>
       </main>
@@ -475,6 +489,33 @@ function SettingsView({ token }: { token: string }) {
   const fields = active === 'general' ? [{ key: 'company_name', label: 'Nome da empresa', type: 'text' }, { key: 'timezone', label: 'Fuso horário', type: 'text' }, { key: 'date_format', label: 'Formato de data', type: 'text' }, { key: 'currency', label: 'Moeda', type: 'text' }] : active === 'production' ? [{ key: 'default_shift', label: 'Turno padrão', type: 'text' }, { key: 'working_days', label: 'Dias de trabalho', type: 'text' }, { key: 'allow_backdated_entries', label: 'Permitir apontamentos retroativos', type: 'checkbox' }] : active === 'inventory' ? [{ key: 'negative_stock', label: 'Permitir estoque negativo', type: 'checkbox' }, { key: 'default_movement_reason', label: 'Motivo padrão de movimentação', type: 'text' }, { key: 'low_stock_alert', label: 'Alertas de estoque mínimo', type: 'checkbox' }] : active === 'purchasing' ? [{ key: 'require_supplier_on_invoice', label: 'Exigir fornecedor na NF', type: 'checkbox' }, { key: 'auto_create_payable', label: 'Criar conta a pagar automaticamente', type: 'checkbox' }] : active === 'finance' ? [{ key: 'due_alert_days', label: 'Alertar vencimentos com antecedência de dias', type: 'number' }, { key: 'default_payment_method', label: 'Forma de pagamento padrão', type: 'text' }, { key: 'allow_overdue_payment', label: 'Permitir baixa após vencimento', type: 'checkbox' }] : [{ key: 'provider', label: 'Provedor fiscal', type: 'text' }, { key: 'document_type', label: 'Documento fiscal', type: 'select', options: ['NF-e', 'NFC-e'] }, { key: 'environment', label: 'Ambiente SEFAZ', type: 'select', options: ['homologacao', 'producao'] }, { key: 'state', label: 'UF do emitente', type: 'text' }, { key: 'issuer_cnpj', label: 'CNPJ do emitente', type: 'text' }, { key: 'state_registration', label: 'Inscrição estadual', type: 'text' }, { key: 'series', label: 'Série', type: 'text' }, { key: 'next_number', label: 'Próximo número', type: 'text' }, { key: 'certificate_type', label: 'Tipo de certificado', type: 'select', options: ['A1', 'A3'] }, { key: 'certificate_reference', label: 'Referência do certificado', type: 'text' }, { key: 'certificate_expires_at', label: 'Validade do certificado', type: 'text' }, { key: 'csc_reference', label: 'Referência CSC/token', type: 'text' }, { key: 'technical_contact', label: 'Contato técnico', type: 'text' }]
   const activeSection = settingSections.find((section) => section.key === active)
   return <><PageHeading eyebrow="Sistema · Administração" title="Configurações" description="Preferências gerais e parâmetros de cada módulo do Atelier ERP." action={<button className="primary-button" onClick={save} disabled={saving}><ShieldCheck size={16} />{saving ? 'Salvando...' : 'Salvar alterações'}</button>} />{message && <div className="settings-success"><ShieldCheck size={15} />{message}</div>}{error && <div className="api-error"><AlertTriangle size={15} />{error}</div>}<div className="settings-layout"><aside className="settings-menu">{settingSections.map((section) => <button key={section.key} className={active === section.key ? 'active' : ''} onClick={() => selectSection(section.key)}><strong>{section.label}</strong><small>{section.description}</small></button>)}</aside><section className="panel settings-panel"><div className="panel-header"><div><span className="panel-kicker">{activeSection?.label}</span><h2>Parâmetros do módulo</h2></div>{active === 'fiscal' && <span className="draft-status">Preparação SEFAZ</span>}</div>{active === 'fiscal' && <div className="settings-callout"><ShieldCheck size={16} /><span>Esta tela prepara o contrato de integração com SEFAZ. O certificado e os tokens devem ser referenciados por um cofre de segredos no ambiente de produção; nenhum documento será transmitido por este MVP.</span></div>}<div className="settings-form">{fields.map((field) => <label className={field.type === 'checkbox' ? 'setting-toggle' : ''} key={field.key}>{field.type === 'checkbox' ? <><input type="checkbox" checked={Boolean(draft[field.key])} onChange={(event) => update(field.key, event.target.checked)} /><span>{field.label}</span></> : <>{field.label}{field.type === 'select' ? <select value={String(draft[field.key] ?? '')} onChange={(event) => update(field.key, event.target.value)}>{field.options?.map((option) => <option key={option}>{option}</option>)}</select> : <input type={field.type} value={String(draft[field.key] ?? '')} onChange={(event) => update(field.key, field.type === 'number' ? Number(event.target.value) : event.target.value)} />}</>}</label>)}</div></section></div></>
+}
+
+const permissionOptions = [
+  { key: 'dashboard', label: 'Visão geral' },
+  { key: 'production', label: 'Produção' },
+  { key: 'inventory', label: 'Estoque' },
+  { key: 'movements', label: 'Movimentações' },
+  { key: 'purchasing', label: 'Notas fiscais e compras' },
+  { key: 'finance', label: 'Financeiro' },
+  { key: 'partners', label: 'Fornecedores e clientes' },
+  { key: 'settings', label: 'Configurações' },
+]
+
+function UsersView({ token }: { token: string }) {
+  const [users, setUsers] = useState<AppUser[]>([])
+  const [showForm, setShowForm] = useState(false)
+  const [editing, setEditing] = useState<AppUser | null>(null)
+  const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [form, setForm] = useState({ name: '', email: '', password: '', permissions: [] as string[] })
+  useEffect(() => { apiFetch<AppUser[]>('/users', token).then(setUsers).catch((requestError: unknown) => setError(requestError instanceof Error ? requestError.message : 'Erro ao carregar usuários')) }, [token])
+  function startCreate() { setEditing(null); setForm({ name: '', email: '', password: '', permissions: [] }); setError(''); setShowForm(true) }
+  function startEdit(user: AppUser) { setEditing(user); setForm({ name: user.name, email: user.email, password: '', permissions: user.permissions }); setError(''); setShowForm(true) }
+  function togglePermission(permission: string) { setForm((current) => ({ ...current, permissions: current.permissions.includes(permission) ? current.permissions.filter((item) => item !== permission) : [...current.permissions, permission] })) }
+  async function saveUser(event: React.FormEvent<HTMLFormElement>) { event.preventDefault(); setSaving(true); setError(''); try { const path = editing ? `/users/${editing.id}` : '/users'; const payload = editing && !form.password ? { name: form.name, email: form.email, permissions: form.permissions, is_active: editing.permissions !== undefined } : form; const saved = await apiFetch<AppUser>(path, token, { method: editing ? 'PUT' : 'POST', body: JSON.stringify(payload) }); setUsers((current) => editing ? current.map((item) => item.id === saved.id ? saved : item) : [...current, saved]); setShowForm(false) } catch (requestError) { setError(requestError instanceof Error ? requestError.message : 'Erro ao salvar usuário') } finally { setSaving(false) } }
+  async function deactivate(user: AppUser) { if (!window.confirm(`Desativar ${user.name}?`)) return; try { await apiFetch<unknown>(`/users/${user.id}`, token, { method: 'DELETE' }); setUsers((current) => current.filter((item) => item.id !== user.id)) } catch (requestError) { setError(requestError instanceof Error ? requestError.message : 'Erro ao desativar usuário') } }
+  return <><PageHeading eyebrow="Administração · Acesso" title="Usuários" description="Crie acessos e defina quais módulos cada pessoa pode visualizar." action={<button className="primary-button" onClick={startCreate}><Plus size={17} /> Novo usuário</button>} />{error && <div className="api-error"><AlertTriangle size={15} />{error}</div>}{showForm && <section className="panel create-panel"><div className="panel-header"><div><span className="panel-kicker">{editing ? 'Editar acesso' : 'Novo acesso'}</span><h2>{editing ? editing.name : 'Criar usuário'}</h2></div><button className="icon-button" onClick={() => setShowForm(false)} aria-label="Fechar"><X size={16} /></button></div><form className="create-form user-form" onSubmit={saveUser}><label>Nome<input required value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></label><label>E-mail<input required type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} /></label><label>Senha<input required={!editing} type="password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} placeholder={editing ? 'Deixe em branco para manter' : 'Mínimo de 6 caracteres'} /></label><div className="permission-field"><strong>Permissões por módulo</strong><small>Defina o que este usuário poderá visualizar.</small><div className="permission-grid">{permissionOptions.map((permission) => <label className="setting-toggle" key={permission.key}><input type="checkbox" checked={form.permissions.includes(permission.key)} onChange={() => togglePermission(permission.key)} /><span>{permission.label}</span></label>)}</div></div><button className="primary-button" disabled={saving}>{saving ? 'Salvando...' : editing ? 'Salvar alterações' : 'Criar usuário'}</button></form></section>}<section className="panel full-panel"><div className="panel-header"><div><span className="panel-kicker">Controle de acesso</span><h2>Usuários cadastrados</h2></div><span className="draft-status">{users.length} registros</span></div><div className="user-list">{users.map((user) => <div className="user-row" key={user.id}><div className="user-avatar">{user.name.slice(0, 2).toUpperCase()}</div><div><strong>{user.name}</strong><small>{user.email} · {user.role}</small></div><div className="user-permissions">{user.permissions.length ? `${user.permissions.length} módulos` : 'Sem permissões específicas'}</div><div className="card-actions"><button className="mini-action" onClick={() => startEdit(user)}>Editar</button><button className="mini-action danger" onClick={() => deactivate(user)}>Desativar</button></div></div>)}</div></section></>
 }
 
 function MovementsView({ token, inventory, onChanged }: { token: string; inventory: InventoryItem[]; onChanged: () => void }) {
